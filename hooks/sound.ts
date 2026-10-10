@@ -1,4 +1,4 @@
-// REVISION: flow-v178-doom-earthrise-sounds
+// REVISION: flow-v179-earthrise-low
 //
 // Soundscapes. Claude Code's `$.audio.play` plays a clip (macOS `afplay`) at a
 // gain set when it starts; it can't loop smoothly or change a clip as it
@@ -225,7 +225,7 @@ const MASTER: Record<string, (s: number) => number> = {
   ski: () => 1.4,
   bubbles: s => 1 - 1.1 * Math.max(0, s - 0.5),
   train: s => 0.2 + 0.38 * Math.sqrt(s),
-  earthrise: s => 0.65 + 0.75 * s,
+  earthrise: s => 0.8 + 1.5 * s - 0.6 * s * s,
   doom: s => 0.5 + 1.35 * s - 0.75 * s * s,
 }
 
@@ -346,11 +346,11 @@ export const LAYERS: Record<string, Layer[]> = {
     { clip: 'train/drone3', variants: BED_TAKES, gain: (s, m) => 0.35 * Math.max(0, 1 - Math.abs((m.amb.wind ?? s) - 0.88) / 0.3) },
   ],
   earthrise: [
-    // A deep, slow drone; an open radio channel's faint hiss; stars coming out in a high shimmer with the work
-    // (each shooting star and comet is an event).
+    // All low, nothing whistling: a deep, slow drone; the capsule's soft cabin air; a deeper rush swelling with the
+    // work (each shooting star and comet is an event).
     { clip: 'earthrise/drone', variants: BED_TAKES, gain: s => 0.5 - 0.15 * s },
-    { clip: 'earthrise/static', variants: BED_TAKES, gain: s => 0.05 + 0.05 * s },
-    { clip: 'earthrise/shimmer', variants: BED_TAKES, gain: s => 0.04 + 0.4 * s * s },
+    { clip: 'earthrise/cabin', variants: BED_TAKES, gain: s => 0.1 + 0.05 * s },
+    { clip: 'earthrise/swell', variants: BED_TAKES, gain: s => 0.04 + 0.45 * s + 0.05 * s * s },
   ],
   doom: [
     // The base: its machinery's hum and the air handlers, computer banks chirping, nukage bubbling in the

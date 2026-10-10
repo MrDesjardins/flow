@@ -1,4 +1,4 @@
-// REVISION: flow-v178-doom-earthrise-sounds
+// REVISION: flow-v179-earthrise-low
 //
 // Builds the soundscapes' clips into sounds/ (AAC, mono 22.05 kHz) and the
 // manifest hooks/sound-files.ts. Each recipe makes a WAV with sox (and Node,
@@ -788,29 +788,27 @@ const RECIPES: Record<string, Record<string, Recipe>> = {
     ),
   },
   earthrise: {
-    // Designed, as the warp drive and the colony ship are (no real counterpart): a
-    // deep slow drone (its pitch carried by harmonics a laptop plays), the faint
-    // hiss of an open radio channel, and stars coming out in a high shimmer.
+    // Designed, as the warp drive and the colony ship are (no real counterpart),
+    // and kept low (nothing whistling or glinting): a deep slow drone (its pitch
+    // carried by harmonics a laptop plays), the soft air of the capsule's cabin,
+    // and a deeper rush swelling with the work.
     drone: {
       variants: 3,
       make: (out, t) => {
-        hum(t.tmp('h.wav'), seedOf(out), SLEN, [[55, 0.25], [110, 0.35], [165, 0.3], [220, 0.22], [330, 0.12], [440, 0.05]], 220)
-        wander(t.tmp('w.wav'), seedOf(out) + 1, SLEN, 180, 900, 0.12, 30)
+        hum(t.tmp('h.wav'), seedOf(out), SLEN, [[55, 0.25], [110, 0.35], [165, 0.3], [220, 0.22], [330, 0.1]], 220)
+        wander(t.tmp('w.wav'), seedOf(out) + 1, SLEN, 120, 420, 0.12, 8)
         fx([t.tmp('w.wav')], t.tmp('w2.wav'), 'gain', -14)
         turbulence(t.tmp('w2.wav'), seedOf(out) + 2, [[0.15, 0.4], [0.5, 0.2]])
-        fx([t.tmp('h.wav'), t.tmp('w2.wav')], out, 'reverb', 70, 50, 100, 'gain', '-n', -3, ...bedEnd(t, false))
+        fx([t.tmp('h.wav'), t.tmp('w2.wav')], out, 'lowpass', 1200, 'reverb', 70, 50, 100, 'gain', '-n', -3, ...bedEnd(t, false))
       },
     },
-    static: {
+    cabin: {
       variants: 3,
-      make: (out, t) => noiseBed(out, t, ['whitenoise', 'bandpass', 2200, 2600], [[0.3, 0.35], [2.2, 0.15], [9, 0.08]], ['reverb', 15], -6),
+      make: (out, t) => noiseBed(out, t, ['pinknoise', 'lowpass', 900, 'lowpass', 1400, 'highpass', 120], [[0.3, 0.3], [1.7, 0.12]], ['reverb', 30], -6),
     },
-    shimmer: {
+    swell: {
       variants: 3,
-      make: (out, t) => {
-        glints(t.tmp('g.wav'), t.v + 160, SLEN, 9)
-        fx([t.tmp('g.wav')], out, 'highpass', 1800, 'reverb', 80, 50, 100, 'gain', '-n', -4, ...bedEnd(t, false))
-      },
+      make: (out, t) => noiseBed(out, t, ['pinknoise', 'lowpass', 500, 'lowpass', 800, 'highpass', 60, 'equalizer', 260, '1q', 4], [[0.11, 0.45], [0.43, 0.2]], ['reverb', 60]),
     },
   },
   doom: {
@@ -943,19 +941,18 @@ const RECIPES: Record<string, Record<string, Recipe>> = {
       },
     },
     streak: {
-      // A shooting star: a quick glassy streak falling in pitch.
+      // A shooting star: a soft, low whoosh (broad, never a whistle).
       variants: 3,
       make: (out, t) => {
-        wander(t.tmp('w.wav'), 240 + t.v, 0.9, 1800, 6000, 9, 60)
-        glints(t.tmp('g.wav'), 243 + t.v, 0.9, 14)
-        fx([t.tmp('w.wav'), t.tmp('g.wav')], out, 'fade', 'q', 0.06, 0.9, 0.6, 'reverb', 70, 50, 100, 'gain', '-n', -4)
+        wander(t.tmp('w.wav'), 240 + t.v, 0.9, 220, 800, 5, 4)
+        fx([t.tmp('w.wav')], out, 'lowpass', 1300, 'fade', 'q', 0.12, 0.9, 0.55, 'reverb', 60, 50, 100, 'gain', '-n', -4)
       },
     },
     comet: {
-      // A comet: a long soft swell of air and a high chord, as it comes into the sky.
+      // A comet: a long soft swell of air and a low chord, as it comes into the sky.
       make: (out, t) => {
-        hum(t.tmp('h.wav'), 250, 6.5, [[440, 0.3], [660, 0.25], [880, 0.2], [1320, 0.1]], 600)
-        synth(t.tmp('a.wav'), 'synth', 6.5, 'pinknoise', 'highpass', 900, 'lowpass', 6000, 'gain', -14)
+        hum(t.tmp('h.wav'), 250, 6.5, [[110, 0.3], [165, 0.28], [220, 0.22], [330, 0.12]], 300)
+        synth(t.tmp('a.wav'), 'synth', 6.5, 'pinknoise', 'highpass', 90, 'lowpass', 1100, 'gain', -10)
         fx([t.tmp('h.wav'), t.tmp('a.wav')], out, 'fade', 'q', 2.5, 6.5, 3.5, 'reverb', 80, 50, 100, 'gain', '-n', -4)
       },
     },
