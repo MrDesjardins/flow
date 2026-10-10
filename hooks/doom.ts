@@ -1,4 +1,4 @@
-// REVISION: flow-v176-doom-plain-names
+// REVISION: flow-v177-doom-sounds
 //
 // Doom (the `doom` scene): a space marine fighting his way through a 1993
 // techbase, on the same dials as the fire; the level is how hard he goes at
@@ -37,6 +37,11 @@
 // a panorama, each column its own ray (about 140° across a wide band), so
 // its edges don't stretch as a flat projection's would; too short for the
 // status bar, his ammo, face and health sit in its corners.
+// Heard (sound.ts): each shot as it fires, the gun's own (his sent the
+// player's start-up time ahead, so it lands with the flash), every monster
+// going down, barrels going up, fireballs thrown, a door rising, a gun
+// changed, a marine teleporting out, his footsteps, over the base's hum and
+// its computers chirping. All generic: none of the game's own sounds.
 // Painted as pixels (2 × 2 a cell) by PixelScene, which eases the level,
 // folds the pixels into glyphs and blanks it all at level 0. Everything here
 // is drawn from scratch in the spirit of the original; no game data is used.
@@ -47,6 +52,7 @@ import { beckon, Crew, easeTo, failed, finished, type AgentMark, type Mate } fro
 import { PixelScene, type Dials, type Painter } from './pixel-scene'
 import { defineScene } from './scene-def'
 import { approach, clamp, grey, hash, hash1, luma, mix, noise1, noise2, rampAt, retain } from './pixels'
+import { hear, leadFrames, type SoundEvent, type SoundKind } from './sound'
 
 // ── Sprites ──────────────────────────────────────────────────────────────
 
@@ -95,6 +101,8 @@ const PISTOL = 0
 const SHOTGUN = 1
 const CHAINGUN = 2
 const PLASMA = 3
+/** Each gun's shot, heard. */
+const SHOT_SOUND: readonly SoundKind[] = ['pistol', 'shotgun', 'chaingun', 'plasma']
 const GUNS = [
   { s: sprite(['345']), ax: 0 },
   { s: sprite(['6633445']), ax: 2 },
@@ -553,6 +561,13 @@ export class Doom extends PixelScene {
 
   /** Shots he's fired since the scene began. */
   shots = 0
+  /** What happened on screen, to be heard (taken by the adapter each frame). */
+  sounds: SoundEvent[] = []
+  /** His next shot's sound sent ahead (see leadFrames), and the stride his last step was heard at. */
+  private primed = false
+  private stride = 0
+  /** The squad marines whose leaving has been heard. */
+  private gone = new WeakSet<Mate>()
 
   agentMarks(): readonly AgentMark[] {
     return this.strength > 0 ? this.crew.marks : []
@@ -687,6 +702,7 @@ export class Doom extends PixelScene {
     if (want !== this.nextGun && this.switchT === 0) {
       this.nextGun = want
       this.switchT = 1
+      hear(this.sounds, { kind: 'reload', v: 1 })
     }
     if (this.switchT > 0) {
       this.switchT++
@@ -736,11 +752,27 @@ export class Doom extends PixelScene {
     this.cool--
     this.sinceShot++
     this.sinceSighted++
-    if (this.hold || L <= 0 || this.switchT > 0) return
+    this.footstep()
+    if (this.hold || L <= 0 || this.switchT > 0) {
+      this.primed = false
+      return
+    }
     const tg = this.target(this.pos, true)
-    if (!tg) return
+    if (!tg) {
+      this.primed = false
+      return
+    }
     this.sinceSighted = 0
+    // The shot's sound goes out the player's start-up time ahead of it, so it lands with the flash: a
+    // target come into sight with his gun ready, he takes aim that long first.
+    const lead = leadFrames(this.strength, this.tint)
+    if (!this.primed && this.cool <= lead) {
+      this.primed = true
+      if (this.cool <= 0) this.cool = Math.ceil(lead - 1e-9)
+      hear(this.sounds, { kind: SHOT_SOUND[this.gun]!, v: 1 })
+    }
     if (this.cool > 0) return
+    this.primed = false
     this.cool = rateOf(this.gun, L)
     this.flash = this.gun === CHAINGUN || this.gun === PLASMA ? 1 : 2
     this.recoil = this.gun === SHOTGUN ? 5 : 2
@@ -749,6 +781,14 @@ export class Doom extends PixelScene {
     this.ammo[this.gun]!--
     if (this.ammo[this.gun]! < 5) this.ammo[this.gun]! += [50, 20, 100, 100][this.gun]!
     this.shoot(tg, this.gun, 1, this.pos + (this.tall ? 16 : 8))
+  }
+
+  /** A footfall each time a foot comes down (the band's legs change every 3 pixels; his view bobs every 2π). */
+  private footstep(): void {
+    const stride = Math.floor(this.walk / (this.tall ? Math.PI * 2 : 3))
+    if (stride === this.stride) return
+    this.stride = stride
+    if (this.v > 0.02) hear(this.sounds, { kind: 'step', v: clamp(this.v / 2) })
   }
 
   /** A shot from `gun` at `tg`, doing `k` of its damage; a plasma bolt leaves from `muzzle`. */
@@ -776,6 +816,7 @@ export class Doom extends PixelScene {
       f.st = DIE
       f.t = 0
       f.gib = dmg >= 8
+      hear(this.sounds, { kind: 'splat', v: f.gib ? 1 : 0.4 + 0.15 * f.kind })
     } else if (f.st === WALK && this.rng.f() < 0.45) {
       f.st = PAIN
       f.t = 3
@@ -785,6 +826,7 @@ export class Doom extends PixelScene {
   private explode(b: Barrel): void {
     if (b.fuse < 0) return
     b.fuse = -1
+    hear(this.sounds, { kind: 'barrel', v: 1 })
     this.puff(BOOM, b.x + 2, b.u, 3, 9)
     for (const f of this.foes) if (f.st < DIE && Math.abs(f.x - b.x) < 22) this.hit(f, 12)
     for (const o of this.barrels) if (o.fuse === 0 && Math.abs(o.x - b.x) < 20) o.fuse = 3
@@ -875,10 +917,14 @@ export class Doom extends PixelScene {
     const dist = f.x - this.pos
     if (f.kind === ZOMBIE) {
       f.flash = 2
+      // (Down the hall: farther, quieter.)
+      hear(this.sounds, { kind: 'foeshot', v: clamp(1 - dist / (this.ahead() + 20)) })
       if (this.rng.f() < 0.25) this.hurt(2 + this.rng.f() * 4)
     } else if (f.kind === IMP) {
+      hear(this.sounds, { kind: 'fireball', v: 0.7 })
       this.missiles.push({ kind: BALL_FIRE, x: f.x - 2, u: f.u, h: 6, v: 1.5, t: 0 })
     } else if (f.kind === CACO) {
+      hear(this.sounds, { kind: 'fireball', v: 1 })
       this.missiles.push({ kind: BALL_CACO, x: f.x - 3, u: f.u, h: FOES[CACO].float + 4, v: 1.15, t: 0 })
     } else if (dist < FOES[PINKY].stand + 6) {
       this.hurt(3 + this.rng.f() * 5)
@@ -929,6 +975,7 @@ export class Doom extends PixelScene {
     for (const dr of this.doors) {
       let want = dr.x - this.pos < 3.5 * UNIT ? 1 : 0
       for (const f of this.foes) if (f.st !== DEAD && Math.abs(f.x - dr.x) < 1.2 * UNIT) want = 1
+      if (want && dr.open === 0) hear(this.sounds, { kind: 'door', v: 1 })
       dr.open = clamp(dr.open + (want ? 0.045 : -0.03))
     }
     retain(this.doors, dr => dr.x > this.pos - 2 * UNIT)
@@ -950,6 +997,10 @@ export class Doom extends PixelScene {
         m.x = this.tall ? -14 : -(this.mx + 10)
         m.y = 10 + Math.floor(m.seed * 20)
       }
+      if (m.leaving && !this.gone.has(m)) {
+        this.gone.add(m)
+        hear(this.sounds, { kind: m.ok ? 'teleport' : 'thud', v: m.ok ? 1 : 0.5 })
+      }
       if (failed(m)) {
         // It fell where it stood: the squad walks on.
         m.x -= this.v
@@ -963,6 +1014,7 @@ export class Doom extends PixelScene {
       const tg = this.target(at, false)
       if (!tg || m.y > 0) continue
       m.y = Math.round(rateOf(this.gun, L) * (1.4 + m.seed * 0.6))
+      hear(this.sounds, { kind: SHOT_SOUND[this.gun]!, v: 0.45 })
       this.shoot(tg, this.gun, 0.6, at + 8)
     }
   }

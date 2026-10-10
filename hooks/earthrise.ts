@@ -1,4 +1,4 @@
-// REVISION: flow-v5-earthrise-notice
+// REVISION: flow-v6-earthrise-sounds
 //
 // Earthrise (the `earthrise` scene): the Earth coming up over a cratered
 // lunar horizon in long, low sunlight, after "earthrise" by Shubham on
@@ -35,12 +35,17 @@
 // everything; a full context turns the light cold and blue. While Claude
 // waits on the person the Earth holds where it stands and stops turning
 // (PixelScene breathes the frame in sepia; a picture takes the same tone).
+//
+// Heard (sound.ts): a deep, slow drone and the faint hiss of an open radio
+// channel, a high shimmer of stars coming out with the work; each shooting
+// star a quick glassy streak, each comet a long soft swell.
 
 import { FRAME_MS } from './activity'
 import { Rng } from './cells'
 import { CLEAR, PixelScene, type Dials, type Painter } from './pixel-scene'
 import { clamp, grey, hash, hash1, luma, mix, rampAt, smoothstep as smooth } from './pixels'
 import { defineScene } from './scene-def'
+import { hear, type SoundEvent } from './sound'
 import { SEPIA_AMOUNT, waitColor, waitGlow, waitLift } from './waiting'
 
 // --- the world, in the original's units --------------------------------------
@@ -685,6 +690,8 @@ export class Earthrise extends PixelScene {
   private readonly rng = new Rng(Math.floor(hash1(this.seed + 13) * 0x7fffffff))
   /** The frame a picture was last asked for: the sky's visitors cross the view that's on show. */
   private picT = -1e9
+  /** What happened on screen, to be heard (taken by the adapter each frame). */
+  sounds: SoundEvent[] = []
 
   protected resize(d: Dials): void {
     this.cells = layout(d.columns * 2, d.rows * 2, 2, d.tall)
@@ -742,6 +749,8 @@ export class Earthrise extends PixelScene {
         len: 6 + 9 * rng.f(),
         b: 0.7 + 0.6 * rng.f(),
       })
+      // (Brighter, louder; drawn from what it already drew, so the sky goes as it did.)
+      hear(this.sounds, { kind: 'streak', v: clamp((this.meteors[this.meteors.length - 1]!.b - 0.6) / 0.7) })
     }
 
     for (let i = this.comets.length - 1; i >= 0; i--) {
@@ -756,6 +765,7 @@ export class Earthrise extends PixelScene {
     if (this.comets.length < room && rng.f() < comets * dt) {
       const a = (rng.f() - 0.5) * 0.7 + (rng.f() < 0.5 ? 0 : Math.PI)
       const v = 1.5 + 2.5 * rng.f()
+      hear(this.sounds, { kind: 'comet', v: 1 })
       this.comets.push({
         x: c0 + (c1 - c0) * (0.12 + 0.76 * rng.f()),
         y: r0 + (r1 - r0) * (0.12 + 0.4 * rng.f()),

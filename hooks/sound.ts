@@ -1,4 +1,4 @@
-// REVISION: flow-v172-cleanup-followups
+// REVISION: flow-v178-doom-earthrise-sounds
 //
 // Soundscapes. Claude Code's `$.audio.play` plays a clip (macOS `afplay`) at a
 // gain set when it starts; it can't loop smoothly or change a clip as it
@@ -92,6 +92,20 @@ export type SoundKind =
   | 'lap' // a small wave on a calm sea
   | 'swish' // a ski turn
   | 'horn' // a train's horn: pulling away, or before a level crossing
+  | 'pistol' // the marine's guns firing, each its own (a squad marine's too, quieter)
+  | 'shotgun'
+  | 'chaingun'
+  | 'plasma'
+  | 'foeshot' // a zombie firing back, down the hall
+  | 'splat' // a monster going down
+  | 'barrel' // a barrel going up
+  | 'fireball' // a fireball thrown
+  | 'door' // a door rising (through his eyes)
+  | 'reload' // a gun changed
+  | 'teleport' // a squad marine teleporting out, its agent done
+  | 'step' // a footfall
+  | 'streak' // a shooting star
+  | 'comet' // a comet coming into the sky
 export type SoundEvent = { kind: SoundKind; v: number }
 
 /** What a scene is doing now, for its bed: each 0..1 (a scene reports the ones it has). */
@@ -211,11 +225,17 @@ const MASTER: Record<string, (s: number) => number> = {
   ski: () => 1.4,
   bubbles: s => 1 - 1.1 * Math.max(0, s - 0.5),
   train: s => 0.2 + 0.38 * Math.sqrt(s),
+  earthrise: s => 0.65 + 0.75 * s,
+  doom: s => 0.5 + 1.35 * s - 0.75 * s * s,
 }
+
+/** A scene that sounds as another does (doom3d is doom through his eyes): its bed and its master. */
+const SOUNDS_AS: Readonly<Record<string, string>> = { doom3d: 'doom' }
+export const soundsAs = (scene: string): string => SOUNDS_AS[scene] ?? scene
 
 /** A scene's master volume at a level (0..10). */
 export function master(scene: string, level: number): number {
-  return (MASTER[scene] ?? (() => 1))(Math.max(0, Math.min(1, level / 10)))
+  return (MASTER[soundsAs(scene)] ?? (() => 1))(Math.max(0, Math.min(1, level / 10)))
 }
 
 /** The most a play's gain may be: clips peak at -2 to -3 dBFS and afplay's gain multiplies, so past this it clips. */
@@ -325,6 +345,22 @@ export const LAYERS: Record<string, Layer[]> = {
     { clip: 'train/drone2', variants: BED_TAKES, gain: (s, m) => 0.35 * Math.max(0, 1 - Math.abs((m.amb.wind ?? s) - 0.42) / 0.32) },
     { clip: 'train/drone3', variants: BED_TAKES, gain: (s, m) => 0.35 * Math.max(0, 1 - Math.abs((m.amb.wind ?? s) - 0.88) / 0.3) },
   ],
+  earthrise: [
+    // A deep, slow drone; an open radio channel's faint hiss; stars coming out in a high shimmer with the work
+    // (each shooting star and comet is an event).
+    { clip: 'earthrise/drone', variants: BED_TAKES, gain: s => 0.5 - 0.15 * s },
+    { clip: 'earthrise/static', variants: BED_TAKES, gain: s => 0.05 + 0.05 * s },
+    { clip: 'earthrise/shimmer', variants: BED_TAKES, gain: s => 0.04 + 0.4 * s * s },
+  ],
+  doom: [
+    // The base: its machinery's hum and the air handlers, computer banks chirping, nukage bubbling in the
+    // floor; the fighting farther off rumbling louder with the level (every shot, fall and blast is an event).
+    { clip: 'doom/hum', variants: BED_TAKES, gain: s => 0.4 - 0.15 * s },
+    { clip: 'doom/air', variants: BED_TAKES, gain: s => 0.14 + 0.08 * s },
+    { clip: 'doom/computers', variants: BED_TAKES, gain: s => 0.22 },
+    { clip: 'doom/nukage', variants: BED_TAKES, gain: s => 0.2 * (1 - 0.6 * s) },
+    { clip: 'doom/rumble', variants: BED_TAKES, gain: s => 0.55 * s * s },
+  ],
 }
 
 /** Events with a clip of their own (`sounds/<clip>.m4a`), and how loud by their size. */
@@ -344,6 +380,19 @@ export const EVENTS: Partial<Record<SoundKind, { clip: string; variants: number;
   clank: { clip: 'events/clank', variants: 1, gain: v => 0.25 + 0.35 * v },
   lap: { clip: 'events/lap', variants: 3, gain: v => 0.35 + 0.6 * v },
   horn: { clip: 'events/horn', variants: 3, gain: v => 0.35 + 0.6 * v },
+  pistol: { clip: 'events/pistol', variants: 3, gain: v => 0.8 * v },
+  shotgun: { clip: 'events/shotgun', variants: 3, gain: v => 0.95 * v },
+  chaingun: { clip: 'events/chaingun', variants: 3, gain: v => 0.45 * v },
+  plasma: { clip: 'events/plasma', variants: 3, gain: v => 0.28 * v },
+  foeshot: { clip: 'events/pistol', variants: 3, gain: v => 0.12 + 0.3 * v },
+  splat: { clip: 'events/splat', variants: 3, gain: v => 0.35 + 0.5 * v },
+  barrel: { clip: 'events/blast', variants: 3, gain: () => 1 },
+  fireball: { clip: 'events/fireball', variants: 3, gain: v => 0.35 * v },
+  door: { clip: 'events/door', variants: 1, gain: () => 0.6 },
+  reload: { clip: 'events/reload', variants: 1, gain: () => 0.6 },
+  teleport: { clip: 'events/teleport', variants: 1, gain: () => 0.7 },
+  streak: { clip: 'events/streak', variants: 3, gain: v => 0.2 + 0.45 * v },
+  comet: { clip: 'events/comet', variants: 1, gain: () => 0.6 },
 }
 
 /** A clip's file: one of its variants, picked by a hash of the moment and the clip (no fixed rotation to fall in step with). */
@@ -411,6 +460,8 @@ export const MOODS: Record<string, (m: SoundMood) => BedMood> = {
   },
   falcon: rocketMood,
   starship: rocketMood,
+  earthrise: byLevel,
+  doom: byLevel,
 }
 
 /** A layer's gain in a mood's mix (the mix is made at these, before the scene's master volume). */
@@ -448,17 +499,18 @@ const NEAREST = new Map<string, { clip: string; gain: number } | undefined>()
 
 /** The scene's bed's next take for this mood (undefined when it's silent now), never one of those in `not`. */
 export function bedPlay(mood: SoundMood, seed: number, not: readonly string[] = []): Play | undefined {
-  const spec = MOODS[mood.scene]
+  const scene = soundsAs(mood.scene)
+  const spec = MOODS[scene]
   if (!spec) return undefined
-  const want = `${mood.scene}/${spec(mood).key}`
+  const want = `${scene}/${spec(mood).key}`
   let bed = NEAREST.get(want)
   if (bed === undefined && !NEAREST.has(want)) {
-    const key = nearest(mood.scene, want.slice(mood.scene.length + 1))
-    bed = key === undefined ? undefined : { clip: `${mood.scene}/bed-${key}`, gain: BED_GAINS[`${mood.scene}/${key}`] ?? 0 }
+    const key = nearest(scene, want.slice(scene.length + 1))
+    bed = key === undefined ? undefined : { clip: `${scene}/bed-${key}`, gain: BED_GAINS[`${scene}/${key}`] ?? 0 }
     NEAREST.set(want, bed)
   }
   if (!bed) return undefined
-  const gain = master(mood.scene, mood.level) * bed.gain
+  const gain = master(scene, mood.level) * bed.gain
   if (gain <= 0.01) return undefined
   let a = asset(bed.clip, BED_TAKES, seed)
   for (let k = 1; not.includes(a) && k < 64; k++) a = asset(bed.clip, BED_TAKES, seed + k * 7919)
@@ -520,7 +572,7 @@ export function bedStep(
 ): { play: (Play & { id: number })[]; stop: number[] } {
   const play: (Play & { id: number })[] = []
   const stop: number[] = []
-  if (!MIXED.has(mood.scene)) return { play, stop }
+  if (!MIXED.has(soundsAs(mood.scene))) return { play, stop }
   const volume = mood.volume ?? DEFAULT_VOLUME
   const slot = takes[0]
   // (A bed fallen silent keeps its slot, quiet, till the takes it stopped have left the player.)
@@ -655,6 +707,11 @@ const VOICES: Partial<Record<SoundKind, { len: number; voice: (m: Mix, dt: numbe
     },
   },
   crack: { len: 0.03, voice: (m, dt, v) => m.white() * decay(dt, 0.0025) * (0.12 + 0.12 * v) },
+  // A boot on a steel deck: a dull knock (pitched where a laptop plays it) with a scuff of grit, heavier running.
+  step: {
+    len: 0.09,
+    voice: (m, dt, v, x) => (Math.sin(TAU * (150 + 60 * x) * dt) * decay(dt, 0.02) * 0.7 + m.white() * decay(dt, 0.005) * 0.4) * (0.06 + 0.1 * v),
+  },
 }
 
 /** A number in [0, 1) from a seed, scattered (neighbouring seeds land far apart). */
