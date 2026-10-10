@@ -1,4 +1,4 @@
-// REVISION: flow-v178-doom-earthrise-sounds
+// REVISION: flow-v179-doom-volleys
 
 import type { EngineInterface, On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
@@ -2994,7 +2994,11 @@ test('doom: waiting on the person, he stops and holds his fire and the monsters 
   }
 })
 
-test('doom: heard as it happens: each gun its own shot (his sent ahead of its flash, so it lands with it), the fallen, his footsteps; none while he holds for the person', () => {
+/** His single shots' sounds, and each volley's (a fast gun's run of shots) with the frames between its shots. */
+const SHOTS = ['pistol', 'shotgun', 'chaingun', 'plasma']
+const VOLLEY_RATE: Record<string, number> = { rattle3: 3, rattle4: 4, rattle5: 5, bolts2: 2, bolts3: 3 }
+
+test('doom: heard as it happens: each gun its own shot (his sent ahead of its flash, so it lands with it; a fast gun a volley at a time, stopped when it falls silent), the fallen, his footsteps; none while he holds for the person', () => {
   for (const [scene, columns, rows] of [['doom', 120, 5], ['doom', 22, 40], ['doom3d', 160, 14]] as const) {
     const heard = (level: number) => {
       const d = makeScene(scene, 3) as Doom
@@ -3004,29 +3008,58 @@ test('doom: heard as it happens: each gun its own shot (his sent ahead of its fl
       // Each of his shots: the frames between its sound going out and its flash.
       const early: number[] = []
       let sent = -1
+      let last = -99
+      // The frames his shots are heard at (each volley's, as its clip plays them, to a cease), and fired at.
+      const heardAt: number[] = []
+      const firedAt: number[] = []
+      let ceases = 0
       for (let i = 0; i < 900; i++) {
         const shots = d.shots
         d.step()
         for (const e of d.sounds) {
           kinds.add(e.kind)
-          if (e.v === 1 && ['pistol', 'shotgun', 'chaingun', 'plasma'].includes(e.kind)) sent = i
+          if (e.v === 1 && (SHOTS.includes(e.kind) || VOLLEY_RATE[e.kind])) sent = i
+          const r = VOLLEY_RATE[e.kind]
+          const lead = leadFrames(d.strength, 'normal')
+          if (r) for (let k = 0; k < Math.round(1400 / (r * 70)); k++) heardAt.push(i + lead + k * r)
+          if (e.kind === 'cease') {
+            ceases++
+            while (heardAt.length && heardAt[heardAt.length - 1]! > i) heardAt.pop()
+          }
         }
         d.sounds.length = 0
-        if (d.shots > shots && sent >= 0) early.push(i - sent)
+        if (d.shots > shots) {
+          // (The first shot of a run: a volley going on was sent as the last ran out, a run's length ahead.)
+          if (sent >= 0 && i - last > 6) early.push(i - sent)
+          sent = -1
+          last = i
+          firedAt.push(i)
+        }
       }
-      return { kinds, early, d }
+      return { kinds, early, heardAt, firedAt, ceases, d }
     }
     const at = `${scene} ${columns}×${rows}`
-    const [calm, mid, busy] = [heard(1), heard(5), heard(10)]
-    expect([at, calm.kinds.has('pistol'), mid.kinds.has('shotgun'), busy.kinds.has('plasma')]).toEqual([at, true, true, true])
-    expect([at, busy.kinds.has('step'), busy.kinds.has('splat')]).toEqual([at, true, true])
+    const [calm, mid, fast, busy] = [heard(1), heard(5), heard(7), heard(10)]
+    expect([at, calm.kinds.has('pistol'), mid.kinds.has('shotgun'), [...fast.kinds].some(k => k.startsWith('rattle')), [...busy.kinds].some(k => k.startsWith('bolts'))]).toEqual([at, true, true, true, true])
+    // (Footsteps while it's calm; in a busy fight the guns have the player's places.)
+    expect([at, calm.kinds.has('step'), busy.kinds.has('step'), busy.kinds.has('splat')]).toEqual([at, true, false, true])
     // A pistol's or a shotgun's shot is heard the player's start-up time ahead (to the frame), the first of a fight
     // too (he takes aim that long); a faster gun's as soon as the last has fired.
     for (const { early, d } of [calm, mid]) {
       const lead = Math.ceil(leadFrames(d.strength, 'normal') - 1e-9)
       expect([at, early.length > 0, early.every(f => Math.abs(f - lead) <= 1)]).toEqual([at, true, true])
     }
-    expect([at, busy.early.length > 0, busy.early.every(f => f >= 1)]).toEqual([at, true, true])
+    // A fast gun's volley lands with the first shot of a run too (nearly always: a run broken off and taken up
+    // again within a frame or two may not). Its shots are heard with his, to the frame: nearly every shot fired
+    // is heard, and a shot heard that he never fired is the one a cease stops (just begun) or very rare.
+    for (const { early, heardAt, firedAt, ceases, d } of [fast, busy]) {
+      const lead = Math.ceil(leadFrames(d.strength, 'normal') - 1e-9)
+      expect([at, early.length > 0, early.filter(f => Math.abs(f - lead) <= 1).length >= 0.8 * early.length]).toEqual([at, true, true])
+      const near = (xs: number[], f: number) => xs.some(x => Math.abs(x - f) <= 1)
+      const heard = firedAt.filter(f => f < 880 && near(heardAt, f)).length / firedAt.filter(f => f < 880).length
+      const phantoms = heardAt.filter(f => f < 880 && !near(firedAt, f)).length
+      expect([at, heard >= 0.9, phantoms <= ceases + 0.05 * heardAt.length]).toEqual([at, true, true])
+    }
     // Holding for the person: nothing fired, so nothing of his heard.
     const d = busy.d
     d.waiting = true
@@ -3034,7 +3067,7 @@ test('doom: heard as it happens: each gun its own shot (his sent ahead of its fl
     for (let i = 0; i < 120; i++) d.step()
     d.sounds.length = 0
     for (let i = 0; i < 200; i++) d.step()
-    expect([at, d.sounds.filter(e => e.v === 1 && ['pistol', 'shotgun', 'chaingun', 'plasma'].includes(e.kind)).length]).toEqual([at, 0])
+    expect([at, d.sounds.filter(e => e.v === 1 && (SHOTS.includes(e.kind) || VOLLEY_RATE[e.kind])).length]).toEqual([at, 0])
   }
 })
 

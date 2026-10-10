@@ -1,4 +1,4 @@
-// REVISION: flow-v180-earthrise-tones
+// REVISION: flow-v181-doom-volleys
 //
 // Builds the soundscapes' clips into sounds/ (AAC, mono 22.05 kHz) and the
 // manifest hooks/sound-files.ts. Each recipe makes a WAV with sox (and Node,
@@ -494,6 +494,9 @@ function zap(path: string, seed: number, len: number, f0: number, f1: number): v
 }
 
 type Tools = { v: number; tmp: (name: string) => string }
+
+/** How many shots a volley clip holds at a shot every `r` frames: about 1.4 s of fire (doom.ts says the same). */
+const volleyShots = (r: number) => Math.round(1400 / (r * 70))
 type Recipe = { variants?: number; make: (out: string, t: Tools) => void }
 
 /**
@@ -891,6 +894,32 @@ const RECIPES: Record<string, Record<string, Recipe>> = {
         fx([t.tmp('z.wav')], out, 'highpass', 200, 'lowpass', 7000, 'reverb', 30, 50, 50, 'gain', '-n', -3)
       },
     },
+    // A fast gun heard a volley at a time, one clip for VOLLEY_SHOTS of its shots at its rate (frames of 70 ms):
+    // a clip a shot would fill the player's four places (each held for its length and afplay's drain) and cut
+    // each other off unheard. Each shot its own take.
+    ...Object.fromEntries(
+      ([['rattle', 3], ['rattle', 4], ['rattle', 5], ['bolts', 2], ['bolts', 3]] as const).map(([name, r]) => [
+        `${name}${r}-`,
+        {
+          variants: 2,
+          make: (out: string, t: Tools) => {
+            const n = volleyShots(r)
+            const parts = Array.from({ length: n }, (_, i) => {
+              const seed = 340 + 31 * t.v + 7 * i + 100 * r
+              if (name === 'rattle') {
+                gunshot(t.tmp('g.wav'), seed, 0.3, 5000 + 700 * ((i + t.v) % 3), 0.022, 0.9)
+                fx([t.tmp('g.wav')], t.tmp(`s${i}.wav`), 'highpass', 140, 'overdrive', 6, 'gain', -1 + 0.6 * ((i * 7) % 3) / 2, 'pad', ((i * r * 70) / 1000).toFixed(3), 0)
+              } else {
+                zap(t.tmp('z.wav'), seed, 0.16 + 0.02 * ((i + t.v) % 3), 2400 + 300 * ((i + t.v) % 3), 380)
+                fx([t.tmp('z.wav')], t.tmp(`s${i}.wav`), 'highpass', 200, 'lowpass', 7000, 'pad', ((i * r * 70) / 1000).toFixed(3), 0)
+              }
+              return t.tmp(`s${i}.wav`)
+            })
+            fx(parts, out, ...(name === 'rattle' ? ['reverb', 20, 60, 40] : ['reverb', 30, 50, 50]), 'gain', '-n', name === 'rattle' ? -2 : -3)
+          },
+        },
+      ]),
+    ),
     splat: {
       // Something going down: a wet thump and a squelch.
       variants: 3,
@@ -914,15 +943,16 @@ const RECIPES: Record<string, Record<string, Recipe>> = {
       },
     },
     door: {
-      // A heavy door rising: a motor's grind and the slab scraping up, a clunk as it stops.
+      // A heavy door rising: a motor's grind and the slab scraping up, a clunk as it stops (short: in the tall
+      // view a door comes every few seconds, and a clip holds a place in the player for its length).
       make: (out, t) => {
-        hum(t.tmp('m.wav'), 210, 1.4, [[90, 0.4], [180, 0.35], [270, 0.2], [360, 0.1]], 40)
-        synth(t.tmp('s.wav'), 'synth', 1.4, 'brownnoise', 'synth', 1.4, 'pinknoise', 'mix', 'lowpass', 1200, 'highpass', 90, 'gain', -6)
+        hum(t.tmp('m.wav'), 210, 0.9, [[90, 0.4], [180, 0.35], [270, 0.2], [360, 0.1]], 40)
+        synth(t.tmp('s.wav'), 'synth', 0.9, 'brownnoise', 'synth', 0.9, 'pinknoise', 'mix', 'lowpass', 1200, 'highpass', 90, 'gain', -6)
         turbulence(t.tmp('s.wav'), 211, [[7, 0.3], [2, 0.2]])
-        fx([t.tmp('m.wav'), t.tmp('s.wav')], t.tmp('ms.wav'), 'fade', 'q', 0.15, 1.4, 0.2, 'gain', -4)
+        fx([t.tmp('m.wav'), t.tmp('s.wav')], t.tmp('ms.wav'), 'fade', 'q', 0.1, 0.9, 0.15, 'gain', -4)
         clunk(t.tmp('c.wav'), 212)
-        fx([t.tmp('c.wav')], t.tmp('c2.wav'), 'gain', -6, 'pad', 1.25, 0)
-        fx([t.tmp('ms.wav'), t.tmp('c2.wav')], out, 'reverb', 50, 60, 80, 'gain', '-n', -3)
+        fx([t.tmp('c.wav')], t.tmp('c2.wav'), 'gain', -6, 'pad', 0.78, 0)
+        fx([t.tmp('ms.wav'), t.tmp('c2.wav')], out, 'reverb', 35, 60, 60, 'gain', '-n', -3)
       },
     },
     reload: {

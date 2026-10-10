@@ -1,4 +1,4 @@
-// REVISION: flow-v180-earthrise-tones
+// REVISION: flow-v181-doom-volleys
 //
 // Soundscapes. Claude Code's `$.audio.play` plays a clip (macOS `afplay`) at a
 // gain set when it starts; it can't loop smoothly or change a clip as it
@@ -104,6 +104,12 @@ export type SoundKind =
   | 'reload' // a gun changed
   | 'teleport' // a squad marine teleporting out, its agent done
   | 'step' // a footfall
+  | 'rattle3' // a chaingun's volley, a shot every 3 frames (rattle4, rattle5: every 4, 5)
+  | 'rattle4'
+  | 'rattle5'
+  | 'bolts2' // a plasma rifle's volley, a bolt every 2 frames (bolts3: every 3)
+  | 'bolts3'
+  | 'cease' // a gun fallen silent before its volley's clip ran out: that clip stops
   | 'streak' // a shooting star
   | 'comet' // a comet coming into the sky
 export type SoundEvent = { kind: SoundKind; v: number }
@@ -192,7 +198,8 @@ class Mix {
 const decay = (dt: number, tau: number) => Math.exp(-dt / tau)
 
 /** A clip to play and how loud (linear gain, capped at MAX_GAIN). */
-export type Play = { asset: string; gain: number }
+/** A clip to play; a `volley`'s stops early on a `cease`. */
+export type Play = { asset: string; gain: number; volley?: boolean }
 
 /** One layer of a scene's bed: a clip with `variants` takes, at a gain from the mood (`s`: the level, 0..1). */
 type Layer = { clip: string; variants: number; gain: (s: number, m: SoundMood) => number }
@@ -364,7 +371,7 @@ export const LAYERS: Record<string, Layer[]> = {
 }
 
 /** Events with a clip of their own (`sounds/<clip>.m4a`), and how loud by their size. */
-export const EVENTS: Partial<Record<SoundKind, { clip: string; variants: number; gain: (v: number) => number }>> = {
+export const EVENTS: Partial<Record<SoundKind, { clip: string; variants: number; gain: (v: number) => number; volley?: boolean }>> = {
   ignite: { clip: 'events/ignite', variants: 1, gain: () => 1 },
   sep: { clip: 'events/sep', variants: 1, gain: () => 0.9 },
   sonic: { clip: 'events/sonic', variants: 1, gain: () => 1 },
@@ -384,6 +391,11 @@ export const EVENTS: Partial<Record<SoundKind, { clip: string; variants: number;
   shotgun: { clip: 'events/shotgun', variants: 3, gain: v => 0.95 * v },
   chaingun: { clip: 'events/chaingun', variants: 3, gain: v => 0.45 * v },
   plasma: { clip: 'events/plasma', variants: 3, gain: v => 0.28 * v },
+  rattle3: { clip: 'events/rattle3-', variants: 2, gain: v => 0.45 * v, volley: true },
+  rattle4: { clip: 'events/rattle4-', variants: 2, gain: v => 0.45 * v, volley: true },
+  rattle5: { clip: 'events/rattle5-', variants: 2, gain: v => 0.45 * v, volley: true },
+  bolts2: { clip: 'events/bolts2-', variants: 2, gain: v => 0.28 * v, volley: true },
+  bolts3: { clip: 'events/bolts3-', variants: 2, gain: v => 0.28 * v, volley: true },
   foeshot: { clip: 'events/pistol', variants: 3, gain: v => 0.12 + 0.3 * v },
   splat: { clip: 'events/splat', variants: 3, gain: v => 0.35 + 0.5 * v },
   barrel: { clip: 'events/blast', variants: 3, gain: () => 1 },
@@ -689,7 +701,7 @@ export function chimePlay(seed: number): Play {
 export function eventPlay(e: SoundEvent, seed: number, scene: string, level: number): Play | undefined {
   const c = EVENTS[e.kind]
   // (Clips peak near full scale and afplay's gain multiplies: past MAX_GAIN it clips.)
-  return c && { asset: asset(c.clip, c.variants, seed), gain: Math.min(MAX_GAIN, c.gain(e.v) * master(scene, level)) }
+  return c && { asset: asset(c.clip, c.variants, seed), gain: Math.min(MAX_GAIN, c.gain(e.v) * master(scene, level)), volley: c.volley }
 }
 
 /**
