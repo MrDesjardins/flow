@@ -1,4 +1,4 @@
-// REVISION: flow-v179-earthrise-low
+// REVISION: flow-v180-earthrise-tones
 //
 // Soundscapes. Claude Code's `$.audio.play` plays a clip (macOS `afplay`) at a
 // gain set when it starts; it can't loop smoothly or change a clip as it
@@ -346,11 +346,11 @@ export const LAYERS: Record<string, Layer[]> = {
     { clip: 'train/drone3', variants: BED_TAKES, gain: (s, m) => 0.35 * Math.max(0, 1 - Math.abs((m.amb.wind ?? s) - 0.88) / 0.3) },
   ],
   earthrise: [
-    // All low, nothing whistling: a deep, slow drone; the capsule's soft cabin air; a deeper rush swelling with the
-    // work (each shooting star and comet is an event).
+    // No air on the moon: no noise or wind, only steady low tones in one key: a deep drone, its fifth, and a
+    // chord above them filling in with the work (each shooting star and comet is an event).
     { clip: 'earthrise/drone', variants: BED_TAKES, gain: s => 0.5 - 0.15 * s },
-    { clip: 'earthrise/cabin', variants: BED_TAKES, gain: s => 0.1 + 0.05 * s },
-    { clip: 'earthrise/swell', variants: BED_TAKES, gain: s => 0.04 + 0.45 * s + 0.05 * s * s },
+    { clip: 'earthrise/fifth', variants: BED_TAKES, gain: s => 0.15 + 0.1 * s },
+    { clip: 'earthrise/chord', variants: BED_TAKES, gain: s => 0.04 + 0.45 * s },
   ],
   doom: [
     // The base: its machinery's hum and the air handlers, computer banks chirping, nukage bubbling in the

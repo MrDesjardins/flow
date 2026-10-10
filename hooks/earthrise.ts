@@ -1,4 +1,4 @@
-// REVISION: flow-v7-earthrise-low
+// REVISION: flow-v8-earthrise-tones
 //
 // Earthrise (the `earthrise` scene): the Earth coming up over a cratered
 // lunar horizon in long, low sunlight, after "earthrise" by Shubham on
@@ -36,9 +36,9 @@
 // waits on the person the Earth holds where it stands and stops turning
 // (PixelScene breathes the frame in sepia; a picture takes the same tone).
 //
-// Heard (sound.ts), all low, nothing whistling: a deep, slow drone, the
-// capsule's soft cabin air, a deeper rush swelling with the work; each
-// shooting star a soft whoosh, each comet a long swell and a low chord.
+// Heard (sound.ts): no air on the moon, so no wind or noise, only steady low
+// tones in one key: a deep drone and its fifth, a chord filling in with the
+// work; each shooting star a soft low tone, each comet a long low chord.
 
 import { FRAME_MS } from './activity'
 import { Rng } from './cells'
